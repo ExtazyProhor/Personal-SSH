@@ -33,13 +33,11 @@ fn load_url_from_json() -> Option<String> {
             match serde_json::from_str::<Value>(&content) {
                 Ok(json) => json["ws-server-url"].as_str().map(|s| s.to_string()),
                 Err(_) => {
-                    eprintln!("Error parsing JSON.");
                     None
                 }
             }
         }
         Err(_) => {
-            eprintln!("Error reading file.");
             None
         }
     }
@@ -82,7 +80,7 @@ async fn handle_message<T>(
                 }
             }
             Err(_) => {
-                eprintln!("Error parsing command JSON.");
+                
             }
         }
     }
@@ -92,25 +90,20 @@ async fn connect_and_run(url: String) {
     loop {
         match connect_async(url.clone()).await {
             Ok((ws_stream, _)) => {
-                println!("Connected to the server");
                 let (mut write, mut read) = ws_stream.split();
 
                 while let Some(msg) = read.next().await {
                     match msg {
                         Ok(message) => handle_message(&mut write, message).await,
-                        Err(e) => {
-                            eprintln!("Error reading message: {}", e);
+                        Err(_) => {
                             break;
                         }
                     }
                 }
-                println!("Connection lost. Attempting to reconnect...");
             }
-            Err(e) => {
-                eprintln!("Connection error: {}", e);
+            Err(_) => {
             }
         }
-        println!("Reconnecting in 5 seconds...");
         sleep(Duration::from_secs(5)).await;
     }
 }

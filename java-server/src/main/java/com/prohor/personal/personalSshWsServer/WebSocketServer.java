@@ -10,18 +10,16 @@ import java.util.function.Consumer;
 
 @ServerEndpoint(value = "/")
 public class WebSocketServer {
-    private Session agentSession;
-    private Session clientSession;
-    private final Set<String> newSessions = new HashSet<>();
-    private final Consumer<Throwable> log;
-    private final Map<String, Command> commands = new HashMap<>();
-    private final Map<Integer, ResultWaiter> waiters = new HashMap<>();
-    private int lastId = 0;
-    public static WebSocketServer webSocketServer;
-    private CycleExecutor cycleExecutor;
+    private static Session agentSession;
+    private static Session clientSession;
+    private static final Set<String> newSessions = new HashSet<>();
+    private static final Consumer<Throwable> log;
+    private static final Map<String, Command> commands = new HashMap<>();
+    private static final Map<Integer, ResultWaiter> waiters = new HashMap<>();
+    private static int lastId = 0;
+    private static CycleExecutor cycleExecutor;
 
-    public WebSocketServer() {
-        webSocketServer = this;
+    static {
         String strPath = Main.class.getProtectionDomain().getCodeSource().getLocation().getPath();
         if (strPath.endsWith(".jar"))
             log = new FileLogger(new File(strPath).getParentFile());
@@ -34,7 +32,7 @@ public class WebSocketServer {
         }
     }
 
-    private void updateCommands(JSONObject var) {
+    private static void updateCommands(JSONObject var) {
         commands.clear();
         var.getJSONArray("commands").forEach(o -> {
             if (o instanceof JSONObject json) {
@@ -54,7 +52,11 @@ public class WebSocketServer {
                 return;
             }
             newSessions.add(session.getId());
-            session.getBasicRemote().sendText("ping");
+            JSONObject object = new JSONObject();
+            object.put("command", "ping");
+            object.put("alert", "ping");
+            object.put("id", -1);
+            session.getBasicRemote().sendText(object.toString());
         } catch (IOException e) {
             onError(session, e);
         }
@@ -62,16 +64,15 @@ public class WebSocketServer {
 
     @OnMessage
     public synchronized void onMessage(Session session, String message) {
-        JSONObject json = new JSONObject(message);
-
         if (newSessions.contains(session.getId())) {
             newSessions.remove(session.getId());
-            if (message.equals("rust-pong"))
+            if (message.contains("rust-pong"))
                 agentSession = session;
             else if (message.equals("js-pong"))
                 clientSession = session;
             return;
         }
+        JSONObject json = new JSONObject(message);
         try {
             if (isKnownSession(session, agentSession)) {
                 int id = json.getInt("id");
@@ -97,13 +98,14 @@ public class WebSocketServer {
                         return;
                     }
                     Command command = commands.get("netsh");
-                    cycleExecutor = new CycleExecutor(() -> {
-                        sendMessageToAgent(command.command(), -1);
-                    }, json.getInt("delay"));
+                    cycleExecutor = new CycleExecutor(
+                            () -> sendMessageToAgent(command.command(), -1), json.getInt("delay")
+                    );
                     cycleExecutor.start();
                     sendMessageToClient("cycle started", false);
                 } else if (message.equals("update-commands")) {
                     updateCommands(Variables.updateVariables());
+                    sendMessageToClient("commands was updated", false);
                 } else if (commands.containsKey(message)) {
                     Command command = commands.get(message);
                     ResultWaiter waiter = new ResultWaiter(lastId, command.result());
@@ -130,7 +132,7 @@ public class WebSocketServer {
     @OnError
     public void onError(Session session, Throwable throwable) {
         synchronized (log) {
-            log.accept(new Throwable(session.toString(), throwable));
+            log.accept(new Exception(session.toString(), throwable));
         }
     }
 
@@ -140,17 +142,17 @@ public class WebSocketServer {
         return check.getId().equals(target.getId());
     }
 
-    public synchronized void waitingInterrupt(int id, String message) {
+    public static synchronized void waitingInterrupt(int id, String message) {
         waiters.remove(id);
         sendMessageToClient(message, false);
     }
 
-    public synchronized void waitingError(int id) {
+    public static synchronized void waitingError(int id) {
         waiters.remove(id);
         sendMessageToClient("no response from agent", true);
     }
 
-    private void sendMessageToClient(String message, boolean error) {
+    private static void sendMessageToClient(String message, boolean error) {
         if (clientSession == null)
             return;
         JSONObject json = new JSONObject();
@@ -159,7 +161,7 @@ public class WebSocketServer {
         try {
             clientSession.getBasicRemote().sendText(json.toString());
         } catch (IOException e) {
-            onError(clientSession, e);
+            log.accept(e);
         }
     }
 

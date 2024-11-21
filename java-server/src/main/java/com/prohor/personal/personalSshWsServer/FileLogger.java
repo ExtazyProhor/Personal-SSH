@@ -14,8 +14,11 @@ public class FileLogger implements Consumer<Throwable> {
     public void accept(Throwable throwable) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             writer.write(throwable.toString());
-            for (StackTraceElement element : throwable.getStackTrace())
+            writer.newLine();
+            for (StackTraceElement element : throwable.getStackTrace()) {
                 writer.write("\tat " + element);
+                writer.newLine();
+            }
             writer.newLine();
         } catch (IOException e) {
             e.printStackTrace();

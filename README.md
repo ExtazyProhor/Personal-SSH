@@ -39,3 +39,10 @@ target\personal-ssh-ws-client.exe
 
 target\index.html
 ```
+
+# Clear
+```sh
+rmdir /q /s target
+rmdir /q /s rust-agent\target
+rmdir /q /s java-server\target
+```

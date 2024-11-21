@@ -16,10 +16,10 @@ public class ResultWaiter implements Runnable {
         try {
             Thread.sleep(2000);
         } catch (InterruptedException e) {
-            WebSocketServer.webSocketServer.waitingInterrupt(id, message);
+            WebSocketServer.waitingInterrupt(id, message);
             return;
         }
-        WebSocketServer.webSocketServer.waitingError(id);
+        WebSocketServer.waitingError(id);
     }
 
     public void start() {

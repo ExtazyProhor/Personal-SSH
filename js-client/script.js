@@ -8,18 +8,16 @@ function initWebSocket(url) {
     };
 
     ws.onmessage = (event) => {
-    	if (event.data === "ping") {
-    		ws.send("js-pong");
-    	} else {
-    		try {
-                const data = JSON.parse(event.data);
-                if (data.alert) {
-        	        showAlert(data.alert, data.status);
-                }
-    		} catch (e) {
-                console.error("Error parsing JSON message:", e);
-    		}
-    	}
+        try {
+            const data = JSON.parse(event.data);
+            if (data.alert === "ping") {
+                ws.send("js-pong");
+            } else if (data.alert) {
+                showAlert(data.alert, data.status);
+            }
+        } catch (e) {
+            console.error("Error parsing JSON message:", e);
+        }
     };
 
     ws.onclose = () => {
@@ -31,16 +29,9 @@ function initWebSocket(url) {
     };
 }
 
-function loadConfigAndInitWebSocket() {
-    fetch('/variables.json')
-        .then(response => response.json())
-        .then(config => {
-            const wsUrl = config['ws-server-url'];
-            initWebSocket(wsUrl);
-        })
-        .catch(error => {
-            console.error('Error loading configuration:', error);
-        });
+function initWebSocketClient() {
+    const wsUrl = 'ws://localhost:8080';
+    initWebSocket(wsUrl);
 }
 
 function sendAction(action, delay = null) {
@@ -81,4 +72,4 @@ function applyDelay() {
     closeModal();
 }
 
-window.onload = loadConfigAndInitWebSocket;
+window.onload = initWebSocketClient;
