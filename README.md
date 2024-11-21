@@ -24,7 +24,7 @@ mvn -f java-server/pom.xml clean package
 rmdir /q /s target
 mkdir target
 copy variables.json target
-copy rust-agent/target/debug/personal-ssh-ws-client.exe target
-copy js-client/* target
-copy java-server/target/*.jar target
+copy rust-agent\target\debug\personal-ssh-ws-client.exe target
+copy js-client\* target
+copy java-server\target\*.jar target
 ```
