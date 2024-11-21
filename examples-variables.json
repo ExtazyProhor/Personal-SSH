@@ -1,0 +1,16 @@
+{
+  "ws-server-url": "ws://localhost:8080/",
+  "ws-server-port": 8080,
+  "commands": [
+    {
+      "keyword": "create-folder",
+      "command": "mkdir folder",
+      "result": "the folder was created"
+    },
+    {
+      "keyword": "delete-file",
+      "command": "del file.txt",
+      "result": "the file was deleted"
+    }
+  ]
+}
