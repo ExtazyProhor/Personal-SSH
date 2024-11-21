@@ -3,32 +3,28 @@ package com.prohor.personal.personalSshWsServer;
 import jakarta.websocket.*;
 import jakarta.websocket.server.ServerEndpoint;
 import org.json.JSONObject;
+import org.slf4j.*;
 
 import java.io.*;
 import java.util.*;
-import java.util.function.Consumer;
 
 @ServerEndpoint(value = "/")
 public class WebSocketServer {
+    private static final Logger log = LoggerFactory.getLogger(WebSocketServer.class);
+
     private static Session agentSession;
     private static Session clientSession;
     private static final Set<String> newSessions = new HashSet<>();
-    private static final Consumer<Throwable> log;
     private static final Map<String, Command> commands = new HashMap<>();
     private static final Map<Integer, ResultWaiter> waiters = new HashMap<>();
     private static int lastId = 0;
     private static CycleExecutor cycleExecutor;
 
     static {
-        String strPath = Main.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-        if (strPath.endsWith(".jar"))
-            log = new FileLogger(new File(strPath).getParentFile());
-        else
-            log = Throwable::printStackTrace;
         try {
             updateCommands(Variables.getVariables());
         } catch (IOException e) {
-            log.accept(e);
+            log.error("Error updating commands", e);
         }
     }
 
@@ -48,9 +44,11 @@ public class WebSocketServer {
     public synchronized void onOpen(Session session) {
         try {
             if (newSessions.size() >= 2) {
+                log.warn("too many new sessions, {} close", session.getId());
                 session.close();
                 return;
             }
+            log.info("session {} added to new", session.getId());
             newSessions.add(session.getId());
             JSONObject object = new JSONObject();
             object.put("command", "ping");
@@ -66,55 +64,65 @@ public class WebSocketServer {
     public synchronized void onMessage(Session session, String message) {
         if (newSessions.contains(session.getId())) {
             newSessions.remove(session.getId());
-            if (message.contains("rust-pong"))
+            if (message.contains("rust-pong")) {
                 agentSession = session;
-            else if (message.equals("js-pong"))
+                log.info("agent session established: {}", session.getId());
+            } else if (message.equals("js-pong")) {
                 clientSession = session;
+                log.info("client session established: {}", session.getId());
+            } else
+                log.warn("unknown answer from new session {}: {}", session.getId(), message);
             return;
         }
         JSONObject json = new JSONObject(message);
         try {
             if (isKnownSession(session, agentSession)) {
+                log.info("message from agent {}: {}", session.getId(), json);
                 int id = json.getInt("id");
                 if (waiters.containsKey(id)) {
                     ResultWaiter waiter = waiters.get(id);
                     waiter.interrupt();
                 }
-            } else if (isKnownSession(session, clientSession)) {
-                message = json.getString("action");
-                if (message.equals("stop-cycle")) {
-                    if (cycleExecutor == null) {
-                        sendMessageToClient("there is no cycle", true);
-                        return;
-                    }
-                    cycleExecutor.interrupt();
-                    cycleExecutor = null;
-                    sendMessageToClient("cycle was interrupted", false);
-                } else if (message.equals("netsh-cycle")) {
-                    if (!commands.containsKey("netsh"))
-                        return;
-                    if (cycleExecutor != null) {
-                        sendMessageToClient("cycle has already started", true);
-                        return;
-                    }
-                    Command command = commands.get("netsh");
-                    cycleExecutor = new CycleExecutor(
-                            () -> sendMessageToAgent(command.command(), -1), json.getInt("delay")
-                    );
-                    cycleExecutor.start();
-                    sendMessageToClient("cycle started", false);
-                } else if (message.equals("update-commands")) {
-                    updateCommands(Variables.updateVariables());
-                    sendMessageToClient("commands was updated", false);
-                } else if (commands.containsKey(message)) {
-                    Command command = commands.get(message);
-                    ResultWaiter waiter = new ResultWaiter(lastId, command.result());
-                    if (sendMessageToAgent(command.command(), lastId)) {
-                        waiters.put(lastId, waiter);
-                        waiter.start();
-                    }
-                    lastId++;
+                return;
+            }
+            if (!isKnownSession(session, clientSession)) {
+                log.warn("message from unknown session {}: {}", session.getId(), json);
+                return;
+            }
+            log.info("message from client {}: {}", session.getId(), json);
+            message = json.getString("action");
+            if (message.equals("stop-cycle")) {
+                if (cycleExecutor == null) {
+                    sendMessageToClient("there is no cycle", true);
+                    return;
                 }
+                cycleExecutor.interrupt();
+                cycleExecutor = null;
+                sendMessageToClient("cycle was interrupted", false);
+            } else if (message.equals("netsh-cycle")) {
+                if (!commands.containsKey("netsh"))
+                    return;
+                if (cycleExecutor != null) {
+                    sendMessageToClient("cycle has already started", true);
+                    return;
+                }
+                Command command = commands.get("netsh");
+                cycleExecutor = new CycleExecutor(
+                        () -> sendMessageToAgent(command.command(), -1), json.getInt("delay")
+                );
+                cycleExecutor.start();
+                sendMessageToClient("cycle started", false);
+            } else if (message.equals("update-commands")) {
+                updateCommands(Variables.updateVariables());
+                sendMessageToClient("commands was updated", false);
+            } else if (commands.containsKey(message)) {
+                Command command = commands.get(message);
+                ResultWaiter waiter = new ResultWaiter(lastId, command.result());
+                if (sendMessageToAgent(command.command(), lastId)) {
+                    waiters.put(lastId, waiter);
+                    waiter.start();
+                }
+                lastId++;
             }
         } catch (IOException e) {
             onError(session, e);
@@ -123,16 +131,20 @@ public class WebSocketServer {
 
     @OnClose
     public synchronized void onClose(Session session) {
-        if (isKnownSession(session, agentSession))
+        if (isKnownSession(session, agentSession)) {
             agentSession = null;
-        if (isKnownSession(session, clientSession))
+            log.debug("agent {} disconnected", session.getId());
+        } else if (isKnownSession(session, clientSession)) {
             clientSession = null;
+            log.debug("client {} disconnected", session.getId());
+        } else
+            log.debug("unknown session {} disconnected", session.getId());
     }
 
     @OnError
     public void onError(Session session, Throwable throwable) {
         synchronized (log) {
-            log.accept(new Exception(session.toString(), throwable));
+            log.error("Error in session {}", session.getId(), throwable);
         }
     }
 
@@ -161,11 +173,11 @@ public class WebSocketServer {
         try {
             clientSession.getBasicRemote().sendText(json.toString());
         } catch (IOException e) {
-            log.accept(e);
+            log.warn("error send message to client", e);
         }
     }
 
-    private boolean sendMessageToAgent(String command, int id) {
+    private static boolean sendMessageToAgent(String command, int id) {
         if (agentSession == null) {
             sendMessageToClient("agent not connected", true);
             return false;
@@ -176,7 +188,7 @@ public class WebSocketServer {
         try {
             agentSession.getBasicRemote().sendText(json.toString());
         } catch (IOException e) {
-            onError(agentSession, e);
+            log.warn("error send message to agent", e);
         }
         return true;
     }
