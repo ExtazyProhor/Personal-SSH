@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Personal SSH</title>
+	<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<div class="container">
+    <div class="button-container">
+        <button onclick="sendAction('update-commands')">Update commands</button>
+        <button onclick="sendAction('ping')">Ping</button>
+        <button onclick="sendAction('stop-cycle')">Stop WLAN off cycle</button>
+        <button class="confirm" onclick="confirmAction('netsh')">WLAN off</button>
+        <button class="confirm" onclick="confirmAction('sleep')">Sleep</button>
+        <button class="confirm" onclick="confirmAction('shutdown')">Shutdown</button>
+        <button class="confirm" onclick="confirmAction('stop')">Stop</button>
+        <button onclick="openModal()">WLAN off cycle</button>
+    </div>
+    <div id="alertBox" class="alert"></div>
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Set Delay</h2>
+        <input type="number" id="delayInput" placeholder="delay">
+        <button onclick="applyDelay()">Apply</button>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
