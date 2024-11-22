@@ -108,7 +108,7 @@ public class WebSocketServer {
                 }
                 Command command = commands.get("netsh");
                 cycleExecutor = new CycleExecutor(
-                        () -> sendMessageToAgent(command.command(), -1), json.getInt("delay")
+                        () -> sendMessageToAgent(command.command(), -1, false), json.getInt("delay")
                 );
                 cycleExecutor.start();
                 sendMessageToClient("cycle started", false);
@@ -118,11 +118,14 @@ public class WebSocketServer {
             } else if (commands.containsKey(message)) {
                 Command command = commands.get(message);
                 ResultWaiter waiter = new ResultWaiter(lastId, command.result());
-                if (sendMessageToAgent(command.command(), lastId)) {
+                if (sendMessageToAgent(command.command(), lastId, true)) {
                     waiters.put(lastId, waiter);
                     waiter.start();
                 }
                 lastId++;
+            } else {
+                log.warn("unknown command from client: {}", message);
+                sendMessageToClient("unknown command: " + message, true);
             }
         } catch (IOException e) {
             onError(session, e);
@@ -178,9 +181,10 @@ public class WebSocketServer {
         }
     }
 
-    private static boolean sendMessageToAgent(String command, int id) {
+    private static boolean sendMessageToAgent(String command, int id, boolean reply) {
         if (agentSession == null) {
-            sendMessageToClient("agent not connected", true);
+            if (reply)
+                sendMessageToClient("agent not connected", true);
             return false;
         }
         JSONObject json = new JSONObject();

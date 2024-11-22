@@ -2,14 +2,14 @@
 <Configuration status="WARN">
     <Appenders>
         <File name="FileAppender" fileName="app.log" append="true">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n"/>
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss}{Europe/Moscow} %-5p %c{1}:%L - %m%n"/>
         </File>
     </Appenders>
     <Loggers>
         <Root level="warn">
             <AppenderRef ref="FileAppender"/>
         </Root>
-        <Logger name="com.prohor" level="debug" additivity="false">
+        <Logger name="com.prohor" level="trace" additivity="false">
             <AppenderRef ref="FileAppender"/>
         </Logger>
     </Loggers>
