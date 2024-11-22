@@ -44,11 +44,11 @@ public class WebSocketServer {
     public synchronized void onOpen(Session session) {
         try {
             if (newSessions.size() >= 2) {
-                log.warn("too many new sessions, {} close", session.getId());
+                log.warn("too many new sessions, {} close", hash(session));
                 session.close();
                 return;
             }
-            log.info("session {} added to new", session.getId());
+            log.info("session {} added to new", hash(session));
             newSessions.add(session.getId());
             JSONObject object = new JSONObject();
             object.put("command", "ping");
@@ -66,18 +66,18 @@ public class WebSocketServer {
             newSessions.remove(session.getId());
             if (message.contains("rust-pong")) {
                 agentSession = session;
-                log.info("agent session established: {}", session.getId());
+                log.info("agent session established: {}", hash(session));
             } else if (message.equals("js-pong")) {
                 clientSession = session;
-                log.info("client session established: {}", session.getId());
+                log.info("client session established: {}", hash(session));
             } else
-                log.warn("unknown answer from new session {}: {}", session.getId(), message);
+                log.warn("unknown answer from new session {}: {}", hash(session), message);
             return;
         }
         JSONObject json = new JSONObject(message);
         try {
             if (isKnownSession(session, agentSession)) {
-                log.info("message from agent {}: {}", session.getId(), json);
+                log.info("message from agent {}: {}", hash(session), json);
                 int id = json.getInt("id");
                 if (waiters.containsKey(id)) {
                     ResultWaiter waiter = waiters.get(id);
@@ -86,10 +86,10 @@ public class WebSocketServer {
                 return;
             }
             if (!isKnownSession(session, clientSession)) {
-                log.warn("message from unknown session {}: {}", session.getId(), json);
+                log.warn("message from unknown session {}: {}", hash(session), json);
                 return;
             }
-            log.info("message from client {}: {}", session.getId(), json);
+            log.info("message from client {}: {}", hash(session), json);
             message = json.getString("action");
             if (message.equals("stop-cycle")) {
                 if (cycleExecutor == null) {
@@ -131,20 +131,21 @@ public class WebSocketServer {
 
     @OnClose
     public synchronized void onClose(Session session) {
+        newSessions.remove(session.getId());
         if (isKnownSession(session, agentSession)) {
             agentSession = null;
-            log.debug("agent {} disconnected", session.getId());
+            log.debug("agent {} disconnected", hash(session));
         } else if (isKnownSession(session, clientSession)) {
             clientSession = null;
-            log.debug("client {} disconnected", session.getId());
+            log.debug("client {} disconnected", hash(session));
         } else
-            log.debug("unknown session {} disconnected", session.getId());
+            log.debug("unknown session {} disconnected", hash(session));
     }
 
     @OnError
     public void onError(Session session, Throwable throwable) {
         synchronized (log) {
-            log.error("Error in session {}", session.getId(), throwable);
+            log.error("Error in session {}", hash(session), throwable);
         }
     }
 
@@ -191,5 +192,10 @@ public class WebSocketServer {
             log.warn("error send message to agent", e);
         }
         return true;
+    }
+
+    private static String hash(Session session) {
+        String s = Integer.toHexString(session.getId().hashCode());
+        return "0".repeat(8 - s.length()) + s;
     }
 }
